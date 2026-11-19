@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>حدس کلمه</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root { --bg:#f4f6fa; --card:#fff; --text:#1c2331; --muted:#6b7488; --blue:#2f7de1; --red:#e5484d; --ok:#2fa84f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12161f; --card:#1d2330; --text:#eef1f7; --muted:#97a0b5; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: Tahoma, "Vazirmatn", sans-serif;
+         padding: env(safe-area-inset-top) 14px env(safe-area-inset-bottom); min-height:100vh; }
+  h1 { font-size:20px; text-align:center; margin:18px 0 6px; }
+  .view { display:none; max-width:480px; margin:0 auto; }
+  .view.on { display:block; }
+  .card { background:var(--card); border-radius:14px; padding:14px; margin-bottom:12px; }
+  .teams { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .team h3 { margin:0 0 8px; font-size:16px; }
+  .team.blue h3 { color:var(--blue); } .team.red h3 { color:var(--red); }
+  ul { list-style:none; margin:8px 0 0; padding:0; min-height:40px; }
+  li { padding:4px 0; font-size:14px; }
+  li.off { opacity:.45; }
+  button { font:inherit; border:0; border-radius:10px; padding:11px 14px; width:100%; color:#fff; background:var(--blue); cursor:pointer; }
+  button.red { background:var(--red); }
+  button:disabled { opacity:.45; }
+  button.sel { outline:3px solid var(--text); }
+  .muted { color:var(--muted); font-size:13px; text-align:center; margin-bottom:10px; }
+  .top { display:flex; justify-content:space-between; font-size:14px; color:var(--muted); }
+  .bar { height:8px; background:var(--card); border-radius:6px; overflow:hidden; margin:10px 0 18px; }
+  .bar > div { height:100%; width:100%; background:var(--ok); }
+  .letters { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:6px 0 18px; direction:rtl; }
+  .box { min-width:46px; height:52px; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:bold;
+         background:var(--card); border-radius:10px; box-shadow:0 1px 0 rgba(0,0,0,.12); }
+  input { width:100%; font:inherit; font-size:20px; padding:12px; border-radius:10px; border:2px solid var(--muted);
+          background:var(--card); color:var(--text); text-align:center; margin-bottom:10px; }
+  #status { min-height:26px; text-align:center; font-weight:bold; margin:6px 0; }
+  .score { display:flex; justify-content:space-around; font-size:22px; font-weight:bold; margin:8px 0; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-left:6px; }
+  .dot.blue { background:var(--blue); } .dot.red { background:var(--red); }
+</style>
+</head>
+<body>
+
+<div id="lobby" class="view">
+  <h1>🎯 بازی حدس کلمه</h1>
+  <div id="lvl" class="muted"></div>
+  <div class="teams">
+    <div class="card team blue"><h3>🔵 تیم آبی</h3><button id="joinBlue">پیوستن</button><ul id="listBlue"></ul></div>
+    <div class="card team red"><h3>🔴 تیم قرمز</h3><button id="joinRed" class="red">پیوستن</button><ul id="listRed"></ul></div>
+  </div>
+  <div class="card">
+    <button id="startBtn" style="display:none">شروع بازی</button>
+    <div id="lobbyMsg" class="muted" style="margin:8px 0 0"></div>
+  </div>
+</div>
+
+<div id="game" class="view">
+  <div class="top"><span id="rn"></span><span id="sec"></span></div>
+  <div class="bar"><div id="barFill"></div></div>
+  <div id="letters" class="letters"></div>
+  <input id="guess" autocomplete="off" placeholder="حدست رو بنویس…">
+  <button id="sendBtn">ثبت</button>
+  <div id="status"></div>
+  <div id="answer" class="muted"></div>
+</div>
+
+<div id="result" class="view">
+  <h1 id="winner"></h1>
+  <div class="card">
+    <div class="score"><span style="color:var(--blue)" id="sBlue"></span><span style="color:var(--red)" id="sRed"></span></div>
+    <div class="muted" style="margin:0">مجموع امتیاز: آبی | قرمز</div>
+  </div>
+  <div class="card"><ul id="board"></ul></div>
+  <button id="againBtn" style="display:none">بازی دوباره</button>
+</div>
+
+<div id="error" class="view"><h1 id="errMsg"></h1></div>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const q = new URLSearchParams(location.search); // only used for testing in a normal browser (DEV=1)
+const $ = (id) => document.getElementById(id);
+
+let myUid = null;
+let S = { phase: 'lobby', hostId: null, players: [] };
+let myTeam = null, roundOpen = false, answered = false, deadline = 0;
+
+const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+const send = (m) => ws.readyState === 1 && ws.send(JSON.stringify(m));
+ws.onopen = () => send({
+  t: 'join',
+  initData: tg ? tg.initData : '',
+  room: q.get('room'), uid: q.get('uid'), name: q.get('name'),
+});
+ws.onclose = () => { if (!$('error').classList.contains('on')) { $('lobbyMsg').textContent = 'ارتباط قطع شد. بازی رو دوباره باز کن.'; } };
+
+function show(id) {
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === id));
+}
+function li(text, off) {
+  const el = document.createElement('li');
+  el.textContent = text;
+  if (off) el.className = 'off';
+  return el;
+}
+const isHost = () => myUid !== null && String(S.hostId) === String(myUid);
+const teamCount = (t) => S.players.filter((p) => p.team === t && p.online).length;
+
+function renderLobby() {
+  show('lobby');
+  ['blue', 'red'].forEach((t) => {
+    const ul = $(t === 'blue' ? 'listBlue' : 'listRed');
+    ul.innerHTML = '';
+    S.players.filter((p) => p.team === t).forEach((p) =>
+      ul.appendChild(li(p.name + (String(p.uid) === String(S.hostId) ? ' 👑' : ''), !p.online)));
+  });
+  $('joinBlue').classList.toggle('sel', myTeam === 'blue');
+  $('joinRed').classList.toggle('sel', myTeam === 'red');
+  const ready = teamCount('blue') >= 1 && teamCount('red') >= 1;
+  $('startBtn').style.display = isHost() ? 'block' : 'none';
+  $('startBtn').disabled = !ready;
+  $('lobbyMsg').textContent = isHost()
+    ? (ready ? 'وقتی همه عضو شدن، بازی رو شروع کن.' : 'تا یه نفر دیگه عضو نشه نمی‌تونی شروع کنی. توی هر تیم باید حداقل یه نفر باشه.')
+    : 'منتظر شروع بازی توسط میزبان…';
+}
+
+function renderBoard() {
+  show('result');
+  const ul = $('board'); ul.innerHTML = '';
+  S.players.filter((p) => p.team).sort((a, b) => b.score - a.score).forEach((p, i) => {
+    const el = document.createElement('li');
+    const d = document.createElement('span'); d.className = 'dot ' + p.team;
+    el.appendChild(d);
+    el.appendChild(document.createTextNode((i + 1) + '. ' + p.name + ' — ' + p.score));
+    ul.appendChild(el);
+  });
+}
+
+function setInputEnabled(on) {
+  $('guess').disabled = !on; $('sendBtn').disabled = !on;
+  if (on) { $('guess').value = ''; $('guess').focus(); }
+}
+
+function tick() {
+  if (!roundOpen) return;
+  const rem = Math.max(0, deadline - Date.now());
+  $('barFill').style.width = Math.min(100, rem / 100) + '%';
+  $('sec').textContent = Math.ceil(rem / 1000) + ' ثانیه';
+  if (rem > 0) requestAnimationFrame(tick);
+}
+
+function submitGuess() {
+  const text = $('guess').value.trim();
+  if (!text || !roundOpen || answered || !myTeam) return;
+  send({ t: 'guess', text });
+}
+$('sendBtn').onclick = submitGuess;
+$('guess').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGuess(); });
+$('joinBlue').onclick = () => send({ t: 'team', team: 'blue' });
+$('joinRed').onclick = () => send({ t: 'team', team: 'red' });
+$('startBtn').onclick = () => send({ t: 'start' });
+$('againBtn').onclick = () => send({ t: 'again' });
+
+const handlers = {
+  hello(m) { myUid = String(m.uid); },
+  error(m) { $('errMsg').textContent = m.msg; show('error'); },
+  notice(m) { $('lobbyMsg').textContent = m.msg; },
+  state(m) {
+    S = m;
+    const me = m.players.find((p) => String(p.uid) === String(myUid));
+    myTeam = me ? me.team : null;
+    $('lvl').textContent = 'سطح: ' + m.levelName;
+    if (m.phase === 'lobby') { roundOpen = false; renderLobby(); }
+    else if (m.phase === 'done') renderBoard();
+    else if (!$('game').classList.contains('on')) show('game');
+    $('againBtn').style.display = isHost() && m.phase === 'done' ? 'block' : 'none';
+  },
+  round(m) {
+    show('game');
+    roundOpen = true; answered = false;
+    deadline = Date.now() + m.ms;
+    $('rn').textContent = 'کلمه ' + m.n + ' از ' + m.total;
+    $('status').textContent = myTeam ? '' : 'تماشاچی هستی 👀';
+    $('answer').textContent = '';
+    $('letters').innerHTML = '';
+    m.letters.forEach((c) => {
+      const b = document.createElement('div');
+      b.className = 'box'; b.textContent = c;
+      $('letters').appendChild(b);
+    });
+    setInputEnabled(!!myTeam && m.ms > 0);
+    tick();
+  },
+  correct(m) {
+    answered = true;
+    $('status').textContent = '✅ درسته! +' + m.pts + ' امتیاز';
+    $('status').style.color = 'var(--ok)';
+    setInputEnabled(false);
+  },
+  wrong() {
+    $('status').textContent = '❌ اشتباه';
+    $('status').style.color = 'var(--red)';
+    $('guess').value = ''; $('guess').focus();
+  },
+  reveal(m) {
+    roundOpen = false;
+    setInputEnabled(false);
+    $('barFill').style.width = '0%';
+    $('answer').textContent = 'جواب: ' + m.word;
+    if (!answered && myTeam) { $('status').textContent = '⏰ وقت تموم شد'; $('status').style.color = 'var(--muted)'; }
+  },
+  done(m) {
+    $('winner').textContent = m.winner === 'draw' ? '🤝 مساوی شد!' : (m.winner === 'blue' ? '🏆 تیم آبی برنده شد!' : '🏆 تیم قرمز برنده شد!');
+    $('sBlue').textContent = m.totals.blue;
+    $('sRed').textContent = m.totals.red;
+  },
+};
+ws.onmessage = (e) => { const m = JSON.parse(e.data); if (handlers[m.t]) handlers[m.t](m); };
+</script>
+</body>
+</html>
