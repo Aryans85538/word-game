@@ -13,6 +13,7 @@ const DEV = process.env.DEV === '1'; // lets you test in a normal browser
 const ROUNDS = 5;
 const ROUND_MS = 10000;
 const REVEAL_MS = 3000;
+const WAIT_MS = 25000; // time for players to open the game before the first word
 const LEVELS = { easy: 'آسان', medium: 'متوسط', hard: 'سخت' };
 
 const WORDS = [
@@ -65,7 +66,7 @@ function createRoom(id, init) {
     hostName: init.hostName,
     inlineMsgId: init.inlineMsgId || null,
     players: new Map(),
-    phase: 'lobby', // lobby | round | reveal | done
+    phase: 'lobby', // lobby | waiting | round | reveal | done
     round: 0,
     word: '',
     display: '',
@@ -130,20 +131,49 @@ const totals = (r) => {
   return t;
 };
 
+function getPlayer(r, from) {
+  const uid = String(from.id);
+  let p = r.players.get(uid);
+  if (!p) {
+    p = { uid, name: '', team: null, score: 0, solved: false, ws: null };
+    r.players.set(uid, p);
+  }
+  p.name = ([from.first_name, from.last_name].filter(Boolean).join(' ') || 'ناشناس').slice(0, 30);
+  return p;
+}
+
 // ---------- the game message inside the Telegram group ----------
 function lobbyText(r) {
   const names = (t) =>
     [...r.players.values()].filter((p) => p.team === t).map((p) => p.name).join('، ') || '—';
   const head = `🎯 بازی حدس کلمه (${LEVELS[r.level]})\n👑 میزبان: ${r.hostName}`;
+  const teams = `🔵 تیم آبی: ${names('blue')}\n🔴 تیم قرمز: ${names('red')}`;
   if (r.phase === 'lobby') {
-    return `${head}\n\n🔵 تیم آبی: ${names('blue')}\n🔴 تیم قرمز: ${names('red')}\n\nروی دکمه بزنید، تیم انتخاب کنید و منتظر شروع توسط میزبان باشید.`;
+    return `${head}\n\n${teams}\n\nبا دکمه‌های پایین تیمت رو انتخاب کن. وقتی همه آماده بودن، میزبان بازی رو شروع می‌کنه.`;
   }
   if (r.phase === 'done') {
     const t = totals(r);
     const w = t.blue === t.red ? '🤝 مساوی شد!' : t.blue > t.red ? '🏆 تیم آبی برنده شد!' : '🏆 تیم قرمز برنده شد!';
-    return `${head}\n\n🏁 بازی تموم شد\n🔵 آبی: ${t.blue}\n🔴 قرمز: ${t.red}\n\n${w}`;
+    return `${head}\n\n${teams}\n\n🏁 بازی تموم شد\n🔵 آبی: ${t.blue}\n🔴 قرمز: ${t.red}\n\n${w}`;
   }
-  return `${head}\n\n🎮 بازی در حال انجامه…`;
+  if (r.phase === 'waiting') {
+    return `${head}\n\n${teams}\n\n🎮 بازی شروع شد! روی «ورود به بازی» بزن. کلمه اول چند ثانیه دیگه میاد.`;
+  }
+  return `${head}\n\n${teams}\n\n🎮 بازی در حال انجامه. اگه وارد نشدی، روی «ورود به بازی» بزن.`;
+}
+
+function lobbyKeyboard(r) {
+  if (r.phase === 'lobby') {
+    return [
+      [
+        { text: '🔵 تیم آبی', callback_data: 'team:blue' },
+        { text: '🔴 تیم قرمز', callback_data: 'team:red' },
+      ],
+      [{ text: '▶️ شروع بازی (میزبان)', callback_data: 'start' }],
+    ];
+  }
+  if (r.phase === 'done') return [];
+  return [[{ text: '🎮 ورود به بازی', url: `https://t.me/${botUsername}/${APP_NAME}?startapp=${r.id}` }]];
 }
 
 function scheduleLobbyUpdate(r) {
@@ -153,10 +183,7 @@ function scheduleLobbyUpdate(r) {
     const text = lobbyText(r);
     if (text === r.lastText) return;
     r.lastText = text;
-    const kb =
-      r.phase === 'done'
-        ? []
-        : [[{ text: '🎮 ورود به بازی', url: `https://t.me/${botUsername}/${APP_NAME}?startapp=${r.id}` }]];
+    const kb = lobbyKeyboard(r);
     try {
       await bot.telegram.editMessageText(undefined, undefined, r.inlineMsgId, text, {
         reply_markup: { inline_keyboard: kb },
@@ -168,223 +195,3 @@ function scheduleLobbyUpdate(r) {
 }
 
 const pushState = (r) => {
-  broadcast(r, snapshot(r));
-  scheduleLobbyUpdate(r);
-};
-
-// ---------- game flow ----------
-function startGame(r) {
-  r.used.clear();
-  r.round = 0;
-  r.players.forEach((p) => (p.score = 0));
-  nextRound(r);
-}
-
-function nextRound(r) {
-  r.round++;
-  const pool = wordsFor(r.level).filter((w) => !r.used.has(w));
-  const w = pool[Math.floor(Math.random() * pool.length)];
-  r.used.add(w);
-  r.display = w;
-  r.word = norm(w);
-  r.letters = scramble(w);
-  r.phase = 'round';
-  r.players.forEach((p) => (p.solved = false));
-  r.endsAt = Date.now() + ROUND_MS;
-  broadcast(r, { t: 'round', n: r.round, total: ROUNDS, letters: r.letters, ms: ROUND_MS });
-  r.timer = setTimeout(() => endRound(r), ROUND_MS);
-}
-
-function endRound(r) {
-  if (r.phase !== 'round') return;
-  clearTimeout(r.timer);
-  r.phase = 'reveal';
-  broadcast(r, { t: 'reveal', word: r.display });
-  pushState(r);
-  setTimeout(() => (r.round < ROUNDS ? nextRound(r) : finish(r)), REVEAL_MS);
-}
-
-function finish(r) {
-  r.phase = 'done';
-  const t = totals(r);
-  const winner = t.blue === t.red ? 'draw' : t.blue > t.red ? 'blue' : 'red';
-  broadcast(r, { t: 'done', totals: t, winner });
-  pushState(r);
-}
-
-// ---------- web server + websocket ----------
-const app = express();
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
-
-wss.on('connection', (ws) => {
-  ws.on('message', (raw) => {
-    let m;
-    try {
-      m = JSON.parse(raw);
-    } catch {
-      return;
-    }
-
-    if (m.t === 'join') {
-      let info = parseInitData(m.initData);
-      if (!info && DEV) {
-        info = { uid: String(m.uid || ''), name: String(m.name || 'تستی'), room: String(m.room || '') };
-      }
-      if (!info || !info.uid || !info.room) {
-        return send(ws, { t: 'error', msg: 'بازی رو از طریق گروه تلگرام باز کن.' });
-      }
-      let r = rooms.get(info.room);
-      if (!r && DEV) {
-        r = createRoom(info.room, { level: 'easy', hostId: info.uid, hostName: info.name });
-      }
-      if (!r) {
-        return send(ws, { t: 'error', msg: 'این بازی پیدا نشد یا تموم شده. یه بازی جدید بساز.' });
-      }
-      let p = r.players.get(info.uid);
-      if (!p) {
-        p = { uid: info.uid, name: '', team: null, score: 0, solved: false, ws: null };
-        r.players.set(info.uid, p);
-      }
-      p.name = info.name.slice(0, 30);
-      p.ws = ws;
-      ws.ctx = { r, p };
-      send(ws, { t: 'hello', uid: info.uid });
-      pushState(r);
-      if (r.phase === 'round') {
-        send(ws, {
-          t: 'round',
-          n: r.round,
-          total: ROUNDS,
-          letters: r.letters,
-          ms: Math.max(0, r.endsAt - Date.now()),
-        });
-      }
-      return;
-    }
-
-    if (!ws.ctx) return;
-    const { r, p } = ws.ctx;
-
-    if (m.t === 'team' && r.phase === 'lobby' && (m.team === 'blue' || m.team === 'red')) {
-      p.team = m.team;
-      pushState(r);
-    } else if (m.t === 'start' && p.uid === r.hostId && r.phase === 'lobby') {
-      const online = [...r.players.values()].filter((x) => x.team && x.ws);
-      const blue = online.filter((x) => x.team === 'blue').length;
-      const red = online.filter((x) => x.team === 'red').length;
-      if (blue < 1 || red < 1) {
-        send(ws, { t: 'notice', msg: 'تا یه نفر دیگه عضو نشه نمی‌تونی شروع کنی. توی هر تیم باید حداقل یه نفر باشه.' });
-      } else {
-        startGame(r);
-      }
-    } else if (m.t === 'again' && p.uid === r.hostId && r.phase === 'done') {
-      r.phase = 'lobby';
-      r.players.forEach((x) => (x.score = 0));
-      pushState(r);
-    } else if (m.t === 'guess' && r.phase === 'round' && p.team && !p.solved) {
-      if (norm(m.text) === r.word) {
-        const remaining = Math.max(0, r.endsAt - Date.now());
-        const pts = Math.max(10, Math.round((100 * remaining) / ROUND_MS));
-        p.score += pts;
-        p.solved = true;
-        send(ws, { t: 'correct', pts });
-        const active = [...r.players.values()].filter((x) => x.team && x.ws);
-        if (active.every((x) => x.solved)) endRound(r);
-      } else {
-        send(ws, { t: 'wrong' });
-      }
-    }
-  });
-
-  ws.on('close', () => {
-    if (!ws.ctx) return;
-    const { r, p } = ws.ctx;
-    if (p.ws === ws) p.ws = null;
-    pushState(r);
-  });
-});
-
-server.listen(PORT, () => console.log('Server on port ' + PORT));
-
-// forget games older than 6 hours
-setInterval(() => {
-  const now = Date.now();
-  rooms.forEach((r, id) => {
-    if (now - r.createdAt > 6 * 3600 * 1000 && r.phase !== 'round') rooms.delete(id);
-  });
-}, 30 * 60 * 1000);
-
-// ---------- telegram bot ----------
-if (!BOT_TOKEN) {
-  console.log('BOT_TOKEN missing: bot not started (web server only).');
-} else {
-  bot = new Telegraf(BOT_TOKEN);
-
-  bot.start((ctx) =>
-    ctx.reply(`برای بازی، توی گروه بنویس @${botUsername} و روی «حدس کلمه» بزن.`)
-  );
-
-  // typing @botname in a group shows the game as the first suggestion
-  bot.on('inline_query', (ctx) =>
-    ctx.answerInlineQuery(
-      [
-        {
-          type: 'article',
-          id: 'wordgame',
-          title: '🎯 حدس کلمه',
-          description: 'بازی گروهی حدس کلمه، تیم آبی در برابر تیم قرمز',
-          input_message_content: { message_text: '🎯 بازی حدس کلمه\n\nسطح بازی رو انتخاب کن:' },
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: 'آسان', callback_data: 'lvl:easy' },
-                { text: 'متوسط', callback_data: 'lvl:medium' },
-                { text: 'سخت', callback_data: 'lvl:hard' },
-              ],
-            ],
-          },
-        },
-      ],
-      { cache_time: 0, is_personal: true }
-    )
-  );
-
-  // needs "inline feedback" enabled in BotFather; tells us who created the game
-  bot.on('chosen_inline_result', (ctx) => {
-    const res = ctx.chosenInlineResult;
-    if (res.inline_message_id) pendingOwner.set(res.inline_message_id, String(res.from.id));
-  });
-
-  bot.action(/^lvl:(easy|medium|hard)$/, async (ctx) => {
-    const cq = ctx.callbackQuery;
-    const imid = cq.inline_message_id;
-    if (!imid) return ctx.answerCbQuery();
-    const owner = pendingOwner.get(imid);
-    if (owner && owner !== String(cq.from.id)) {
-      return ctx.answerCbQuery('فقط کسی که بازی رو ساخته می‌تونه سطح رو انتخاب کنه.', { show_alert: true });
-    }
-    if (inlineRooms.has(imid)) return ctx.answerCbQuery();
-    const id = crypto.randomBytes(5).toString('hex');
-    const hostName = [cq.from.first_name, cq.from.last_name].filter(Boolean).join(' ') || 'ناشناس';
-    const r = createRoom(id, {
-      level: ctx.match[1],
-      hostId: String(cq.from.id),
-      hostName,
-      inlineMsgId: imid,
-    });
-    inlineRooms.set(imid, id);
-    await ctx.answerCbQuery();
-    scheduleLobbyUpdate(r);
-  });
-
-  (async () => {
-    const me = await bot.telegram.getMe();
-    botUsername = me.username;
-    console.log('Bot started as @' + botUsername);
-    bot.launch().catch((e) => console.error('Bot error:', e));
-  })();
-  process.once('SIGINT', () => bot.stop('SIGINT'));
-  process.once('SIGTERM', () => bot.stop('SIGTERM'));
-}
