@@ -18,15 +18,79 @@ const LEVEL_DESC = {
 };
 
 const WORDS = [
-  'کتاب', 'مداد', 'پنجره', 'خورشید', 'دریا', 'گلدان', 'ستاره', 'پرنده',
-  'مسافر', 'شیرینی', 'کبوتر', 'آسمان', 'باغچه', 'بازار', 'کلاس', 'مدرسه',
-  'هندوانه', 'انار', 'نقاشی', 'موسیقی', 'ماهی', 'درخت', 'دوچرخه', 'تلفن',
-  'چراغ', 'زمستان', 'تابستان', 'پاییز', 'شکلات', 'کامپیوتر', 'ساعت', 'خانه',
-  'خیابان', 'میوه', 'آینه', 'قاشق', 'بالش', 'ماشین', 'فرودگاه', 'کتابخانه',
+  // 4 letters (easy)
+  'کتاب', 'مداد', 'دریا', 'کلاس', 'انار', 'ماهی', 'درخت', 'تلفن',
+  'چراغ', 'ساعت', 'خانه', 'میوه', 'آینه', 'قاشق', 'بالش', 'گربه',
+  'پلنگ', 'کفتر', 'جوجه', 'عقاب', 'طوطی', 'کوسه', 'زمین', 'نقره',
+  'گلاب', 'لاله', 'نرگس', 'سوسن', 'ریشه', 'شاخه', 'لیمو', 'خیار',
+  'هویج', 'پیاز', 'فلفل', 'قهوه', 'پنیر', 'ماست', 'برنج', 'نخود',
+  'گندم', 'کباب', 'خورش', 'حلوا', 'پرده', 'لامپ', 'کلید', 'چاقو',
+  'کتری', 'اجاق', 'جارو', 'حوله', 'شانه', 'عینک', 'کلاه', 'سوزن',
+  'قیچی', 'دفتر', 'نامه', 'کاغذ', 'تخته', 'دکمه', 'کوچه', 'پارک',
+  'جنگل', 'ساحل', 'صحرا', 'جاده', 'مسجد', 'موزه', 'بینی', 'دهان',
+  'زبان', 'گردن', 'سینه', 'زانو', 'ناخن', 'صورت', 'ابرو', 'گونه',
+  'پوست', 'معلم', 'دکتر', 'پزشک', 'نجار', 'قصاب', 'بقال', 'خیاط',
+  'پلیس', 'شاعر', 'نقاش', 'مادر', 'دوست', 'همسر', 'دایی', 'خاله',
+  'دشمن', 'کودک', 'جوان', 'هفته', 'بهار', 'فردا', 'لحظه', 'سفید',
+  'سیاه', 'قرمز', 'بنفش', 'تنیس', 'کشتی', 'بوکس', 'مربی', 'بازی',
+  'مدال', 'گوزن', 'نهنگ', 'اردک', 'کلاغ', 'بلبل', 'عقرب', 'بانک',
+  'قیمت', 'خرید', 'فروش', 'امید', 'آرزو', 'رویا', 'شادی', 'خنده',
+  'گریه', 'دانش', 'رمان', 'قطار', 'قایق', 'مترو', 'ربات', 'پیام',
+  'فیلم', 'صفحه', 'پسته', 'فندق', 'گردو', 'کشمش', 'خرما', 'انبه',
+  'پرچم', 'کمان', 'بلیط', 'حیاط', 'بهشت', 'دوزخ', 'ماسک', 'ملکه',
+  'مدیر', 'قلعه', 'خنجر', 'تنگه', 'زمرد', 'عقیق', 'شبنم', 'غروب',
+  'واحه', 'کویر', 'چشمه', 'نسیم', 'تگرگ', 'سرما', 'گرما', 'شتاب',
+  'زرشک', 'شلیل', 'کیوی', 'کاهو', 'گوجه', 'قارچ', 'شوید', 'کوکو',
+  'کولر', 'پنکه', 'سینی', 'پارچ', 'موکت', 'قالی', 'لحاف', 'قفسه',
+  'نمره', 'کلیه', 'معده', 'روده', 'سبیل', 'آرنج', 'پگاه', 'بهمن',
+  'آبان', 'خروس', 'سوسک', 'افعی', 'خفاش', 'شغال', 'گراز', 'سمور',
+  'پازل', 'شکست', 'داور', 'موشک', 'راکت', 'شبکه', 'حساب', 'تولد',
+  'عیدی', 'یلدا', 'شنبه', 'جمعه', 'آشپز', 'بزرگ', 'کوچک', 'بلند',
+  'تازه', 'کهنه', 'سریع', 'ساده', 'آسان', 'خسته', 'تنها', 'جدید',
+  'مجله', 'آگهی', 'نقشه', 'شیمی', 'زیست', 'انشا',
+  // 5 letters (medium)
+  'پنجره', 'گلدان', 'ستاره', 'پرنده', 'مسافر', 'کبوتر', 'آسمان', 'باغچه',
+  'بازار', 'مدرسه', 'نقاشی', 'پاییز', 'شکلات', 'ماشین', 'روباه', 'زرافه',
+  'میمون', 'بنفشه', 'گیلاس', 'انجیر', 'انگور', 'گلابی', 'لوبیا', 'بستنی',
+  'باران', 'صندلی', 'دیوار', 'چنگال', 'بشقاب', 'لیوان', 'فنجان', 'سماور',
+  'یخچال', 'صابون', 'جوراب', 'شلوار', 'روستا', 'دهکده', 'جزیره', 'کلیسا',
+  'سینما', 'دندان', 'انگشت', 'مهندس', 'آهنگر', 'نانوا', 'خلبان', 'سرباز',
+  'برادر', 'خواهر', 'مهمان', 'امروز', 'دیروز', 'دقیقه', 'ثانیه', 'صورتی',
+  'طلایی', 'سیاره', 'صاعقه', 'طوفان', 'زلزله', 'خرگوش', 'سنجاب', 'مورچه',
+  'زنبور', 'دلفین', 'خرچنگ', 'گنجشک', 'قناری', 'شاهین', 'تجارت', 'مغازه',
+  'فرهنگ', 'تاریخ', 'ماجرا', 'آزادی', 'عدالت', 'تاکسی', 'موتور', 'موزیک',
+  'بادام', 'مرداد', 'پیمان', 'شمشیر', 'چمدان', 'ایوان', 'تابلو', 'گیتار',
+  'پیانو', 'ویولن', 'سنتور', 'تنبور', 'فرشته', 'دستکش', 'ترازو', 'اسپند',
+  'پیرزن', 'الماس', 'یاقوت', 'مهتاب', 'آفتاب', 'دامنه', 'آبشار', 'مرداب',
+  'تالاب', 'گرداب', 'بهاری', 'استان', 'میدان', 'کارگر', 'پرواز', 'فرزند',
+  'پیتزا', 'ادویه', 'جعفری', 'ریحان', 'نعناع', 'تربچه', 'زیتون', 'خربزه',
+  'طالبی', 'ازگیل', 'بخاری', 'توستر', 'ملاقه', 'کفگیر', 'قندان', 'بالشت',
+  'ملحفه', 'لوستر', 'استاد', 'شاگرد', 'تکلیف', 'جمجمه', 'حنجره', 'شقیقه',
+  'پاشنه', 'اسفند', 'خرداد', 'کرگدن', 'تمساح', 'مرجان', 'شاپرک', 'کفتار',
+  'شطرنج', 'تساوی', 'درمان', 'پزشکی', 'جراحی', 'آمپول', 'چاپگر', 'اسکنر',
+  'شارژر', 'باتری', 'کاربر', 'آرامش', 'آسایش', 'دوستی', 'دشمنی', 'راستی',
+  'صداقت', 'شجاعت', 'زندگی', 'عروسی', 'نوروز', 'آدینه', 'شیرین', 'کوتاه',
+  'سنگین', 'آهسته', 'شاداب', 'قدیمی', 'اسباب', 'گزارش', 'تبلیغ', 'ریاضی',
+  'فیزیک', 'دیکته', 'هندسه',
+  // 6 letters (hard)
+  'خورشید', 'شیرینی', 'موسیقی', 'دوچرخه', 'زمستان', 'خیابان', 'آلبالو', 'پیراهن',
+  'موبایل', 'قابلمه', 'خودکار', 'دریاچه', 'پیشانی', 'بازیگر', 'راننده', 'کشاورز',
+  'همسایه', 'نارنجی', 'کهکشان', 'فوتبال', 'دروازه', 'مسابقه', 'قهرمان', 'لاکپشت',
+  'پروانه', 'پنگوئن', 'شترمرغ', 'داستان', 'افسانه', 'اتوبوس', 'کامیون', 'ترافیک',
+  'برنامه', 'تلگرام', 'آناناس', 'نارگیل', 'شهریور', 'مهرگان', 'دمپایی', 'پرتقال',
+  'نارنگی', 'باغبان', 'پادشاه', 'ابریشم', 'پرستار', 'فیروزه', 'بیابان', 'گردباد',
+  'مهمانی', 'دوستان', 'فراموش', 'بازیکن', 'کارمند', 'شهروند', 'پایتخت', 'همبرگر',
+  'آبگوشت', 'فسنجان', 'زعفران', 'دارچین', 'اسفناج', 'زردآلو', 'خرمالو', 'نعلبکی',
+  'نمکدان', 'آباژور', 'قالیچه', 'دبستان', 'دانشجو', 'امتحان', 'ماهیچه', 'انگشتر',
+  'دستبند', 'صبحگاه', 'شامگاه', 'نیمروز', 'بامداد', 'سوسمار', 'بزغاله', 'گوسفند',
+  'گوساله', 'مرغابی', 'عنکبوت', 'سنجاقک', 'چلپاسه', 'باشگاه', 'پیروزی', 'پنالتی',
+  'بهداشت', 'سلامتی', 'بیماری', 'آزمایش', 'کیبورد', 'دوربین', 'رایانه', 'سرنوشت',
+  'اندیشه', 'دلتنگی', 'گلخانه', 'گلفروش', 'خوشحال', 'ناراحت', 'نگهبان', 'ادبیات',
 ];
 // easy: exactly 4 letters, medium: exactly 5 letters, hard: exactly 6 letters
 const LEVEL_LENGTH = { easy: 4, medium: 5, hard: 6 };
 const wordsFor = (level) => WORDS.filter((w) => [...w].length === LEVEL_LENGTH[level]);
+const recentWords = { easy: [], medium: [], hard: [] }; // newest words used in any game, so they are not repeated soon
 
 const rooms = new Map(); // roomId -> room (one per game message, so groups never mix)
 const inlineRooms = new Map(); // inline_message_id -> roomId
@@ -219,13 +283,18 @@ function startGame(r) {
 
 function nextRound(r) {
   r.round++;
-  let pool = wordsFor(r.level).filter((w) => !r.used.has(w));
+  const all = wordsFor(r.level);
+  const recent = recentWords[r.level];
+  let pool = all.filter((w) => !r.used.has(w) && !recent.includes(w));
+  if (!pool.length) pool = all.filter((w) => !r.used.has(w));
   if (!pool.length) {
     r.used.clear();
-    pool = wordsFor(r.level);
+    pool = all;
   }
   const w = pool[Math.floor(Math.random() * pool.length)];
   r.used.add(w);
+  recent.push(w);
+  while (recent.length > Math.floor(all.length / 2)) recent.shift();
   r.display = w;
   r.word = norm(w);
   r.tiles = scramble(w);
@@ -314,6 +383,85 @@ if (!BOT_TOKEN) {
   // needs "inline feedback" enabled in BotFather; the person who sends the game becomes the host
   bot.on('chosen_inline_result', (ctx) => {
     const res = ctx.chosenInlineResult;
+    const level = String(res.result_id || '').replace('lvl-', '');
+    if (!res.inline_message_id || !LEVELS[level]) return;
+    getOrCreateRoom(res.inline_message_id, level, res.from);
+  });
+
+  // join / change team (only before the game starts)
+  bot.action(/^T:(blue|red):(easy|medium|hard)$/, (ctx) => {
+    const cq = ctx.callbackQuery;
+    if (!cq.inline_message_id) return answer(ctx);
+    const r = getOrCreateRoom(cq.inline_message_id, ctx.match[2], cq.from);
+    if (r.phase !== 'lobby') return answer(ctx, 'بازی شروع شده و تیم‌ها قفل شدن.', true);
+    const p = getPlayer(r, cq.from);
+    p.team = ctx.match[1];
+    scheduleUpdate(r);
+    return answer(ctx, p.team === 'blue' ? '🔵' : '🔴');
+  });
+
+  // start (host only)
+  bot.action(/^S:(easy|medium|hard)$/, (ctx) => {
+    const cq = ctx.callbackQuery;
+    if (!cq.inline_message_id) return answer(ctx);
+    const r = getOrCreateRoom(cq.inline_message_id, ctx.match[1], cq.from);
+    if (String(cq.from.id) !== r.hostId) return answer(ctx, 'فقط میزبان می‌تونه بازی رو شروع کنه.', true);
+    if (r.phase !== 'lobby') return answer(ctx);
+    const blue = members(r).filter((p) => p.team === 'blue').length;
+    const red = members(r).filter((p) => p.team === 'red').length;
+    if (blue < 1 || red < 1) {
+      return answer(ctx, 'تا یه نفر دیگه عضو نشه نمی‌تونی شروع کنی. توی هر تیم باید حداقل یه نفر باشه.', true);
+    }
+    startGame(r);
+    return answer(ctx, '▶️');
+  });
+
+  // tap a letter
+  bot.action(/^L:(\d+):(\d+)$/, (ctx) => {
+    const cq = ctx.callbackQuery;
+    const r = roomOf(cq);
+    if (!r) return answer(ctx, 'این بازی پیدا نشد.', true);
+    const rnd = Number(ctx.match[1]);
+    const idx = Number(ctx.match[2]);
+    if (r.phase !== 'round' || r.round !== rnd || Date.now() >= r.endsAt) return answer(ctx, '⏱');
+    const p = r.players.get(String(cq.from.id));
+    if (!p || !p.team) return answer(ctx, 'تو عضو این بازی نیستی.', true);
+    if (p.solved) return answer(ctx, '✅'); // already scored this word
+    if (idx < 0 || idx >= r.tiles.length) return answer(ctx);
+    if (p.sel.length >= r.tiles.length) return answer(ctx, '❌'); // wrong answer: clear it first
+    if (p.sel.includes(idx)) return answer(ctx, p.sel.map((i) => r.tiles[i]).join(''));
+    p.sel.push(idx);
+    if (p.sel.length < r.tiles.length) return answer(ctx, p.sel.map((i) => r.tiles[i]).join(''));
+    // all letters chosen: check automatically
+    if (norm(p.sel.map((i) => r.tiles[i]).join('')) === r.word) {
+      const remaining = Math.max(0, r.endsAt - Date.now());
+      p.score += Math.max(10, Math.round((100 * remaining) / ROUND_MS));
+      p.solved = true;
+      if (members(r).every((x) => x.solved)) endRound(r);
+      return answer(ctx, '✅');
+    }
+    return answer(ctx, '❌');
+  });
+
+  // clear my letters (does not touch the timer)
+  bot.action(/^X:(\d+)$/, (ctx) => {
+    const cq = ctx.callbackQuery;
+    const r = roomOf(cq);
+    if (!r) return answer(ctx);
+    const p = r.players.get(String(cq.from.id));
+    if (r.phase === 'round' && r.round === Number(ctx.match[1]) && p && p.team && !p.solved) p.sel = [];
+    return answer(ctx);
+  });
+
+  (async () => {
+    const me = await bot.telegram.getMe();
+    botUsername = me.username;
+    console.log('Bot started as @' + botUsername);
+    bot.launch().catch((e) => console.error('Bot error:', e));
+  })();
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+             }ctx.chosenInlineResult;
     const level = String(res.result_id || '').replace('lvl-', '');
     if (!res.inline_message_id || !LEVELS[level]) return;
     getOrCreateRoom(res.inline_message_id, level, res.from);
