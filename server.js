@@ -12,9 +12,9 @@ const REVEAL_MS = 3000;
 const START_MS = 3000;
 const LEVELS = { easy: 'آسان', medium: 'متوسط', hard: 'سخت' };
 const LEVEL_DESC = {
-  easy: 'کلمه‌های تا ۴ حرفی',
+  easy: 'کلمه‌های ۴ حرفی',
   medium: 'کلمه‌های ۵ حرفی',
-  hard: 'کلمه‌های ۶ حرف به بالا',
+  hard: 'کلمه‌های ۶ حرفی',
 };
 
 const WORDS = [
@@ -24,12 +24,9 @@ const WORDS = [
   'چراغ', 'زمستان', 'تابستان', 'پاییز', 'شکلات', 'کامپیوتر', 'ساعت', 'خانه',
   'خیابان', 'میوه', 'آینه', 'قاشق', 'بالش', 'ماشین', 'فرودگاه', 'کتابخانه',
 ];
-// easy: up to 4 letters, medium: 5 letters, hard: 6+ letters
-const wordsFor = (level) =>
-  WORDS.filter((w) => {
-    const n = [...w].length;
-    return level === 'easy' ? n <= 4 : level === 'medium' ? n === 5 : n >= 6;
-  });
+// easy: exactly 4 letters, medium: exactly 5 letters, hard: exactly 6 letters
+const LEVEL_LENGTH = { easy: 4, medium: 5, hard: 6 };
+const wordsFor = (level) => WORDS.filter((w) => [...w].length === LEVEL_LENGTH[level]);
 
 const rooms = new Map(); // roomId -> room (one per game message, so groups never mix)
 const inlineRooms = new Map(); // inline_message_id -> roomId
@@ -57,6 +54,14 @@ const norm = (s) =>
     .replace(/ك/g, 'ک')
     .replace(/[\s\u200c\u200d]/g, '')
     .trim();
+// an invisible character (not trimmed by Telegram) is used to centre the lines and to widen the message;
+// if the message looks too wide or too narrow, change TARGET_WIDTH
+const PAD = '\u2800';
+const TARGET_WIDTH = 34;
+const center = (s) => {
+  const side = Math.max(0, Math.floor((TARGET_WIDTH - [...s].length) / 2));
+  return PAD.repeat(side) + s + PAD.repeat(side);
+};
 const fullName = (from) =>
   ([from.first_name, from.last_name].filter(Boolean).join(' ') || 'ناشناس').slice(0, 30);
 
@@ -124,23 +129,28 @@ const totals = (r) => {
 function roomText(r) {
   const names = (t) =>
     [...r.players.values()].filter((p) => p.team === t).map((p) => p.name).join('، ') || '—';
-  const head = `🎯 بازی حدس کلمه (${LEVELS[r.level]})`;
-  const teams = `🔵 تیم آبی: ${names('blue')}\n🔴 تیم قرمز: ${names('red')}`;
-  if (r.phase === 'lobby') return `${head}\n👑 میزبان: ${r.hostName}\n\n${teams}`;
-  if (r.phase === 'starting') return `${head}\n\n${teams}\n\n🎮 بازی شروع شد! آماده باش…`;
+  const head = center(`🎯 بازی حدس کلمه (${LEVELS[r.level]})`);
+  const teams = `${center(`🔵 تیم آبی: ${names('blue')}`)}\n${center(`🔴 تیم قرمز: ${names('red')}`)}`;
+  if (r.phase === 'lobby') return `${head}\n${center(`👑 میزبان: ${r.hostName}`)}\n\n${teams}`;
+  if (r.phase === 'starting') return `${head}\n\n${teams}\n\n${center('🎮 بازی شروع شد! آماده باش…')}`;
   if (r.phase === 'round') {
     const s = Math.max(0, Math.ceil((r.endsAt - Date.now()) / 1000));
-    return `${head}\nکلمه ${r.round} از ${ROUNDS}  ⏱ ${s}`;
+    return `${head}\n${center(`کلمه ${r.round} از ${ROUNDS}  ⏱ ${s}`)}`;
   }
-  if (r.phase === 'reveal') return `${head}\nکلمه ${r.round} از ${ROUNDS}\n\nجواب: ${r.display}`;
+  if (r.phase === 'reveal') {
+    return `${head}\n${center(`کلمه ${r.round} از ${ROUNDS}`)}\n\n${center(`جواب: ${r.display}`)}`;
+  }
   // done
   const t = totals(r);
   const winner = t.blue === t.red ? '🤝 مساوی شد!' : t.blue > t.red ? '🏆 تیم آبی برنده شد!' : '🏆 تیم قرمز برنده شد!';
   const board = members(r)
     .sort((a, b) => b.score - a.score)
-    .map((p, i) => `${i + 1}. ${p.team === 'blue' ? '🔵' : '🔴'} ${p.name} — ${p.score}`)
+    .map((p, i) => center(`${i + 1}. ${p.team === 'blue' ? '🔵' : '🔴'} ${p.name} — ${p.score}`))
     .join('\n');
-  return `${head}\n\n🏁 بازی تموم شد\n🔵 آبی: ${t.blue}\n🔴 قرمز: ${t.red}\n\n${winner}\n\n${board}`;
+  return (
+    `${head}\n\n${center('🏁 بازی تموم شد')}\n${center(`🔵 آبی: ${t.blue}`)}\n${center(`🔴 قرمز: ${t.red}`)}` +
+    `\n\n${center(winner)}\n\n${board}`
+  );
 }
 
 const lobbyButtons = (level) => [
@@ -151,14 +161,21 @@ const lobbyButtons = (level) => [
   [{ text: '▶️ شروع بازی', callback_data: `S:${level}` }],
 ];
 
+// how many letter buttons per row, for words of 4, 5 and 6 letters
+const TILE_ROWS = { 4: [2, 2], 5: [3, 2], 6: [3, 3] };
+
 function roomKeyboard(r) {
   if (r.phase === 'lobby') return lobbyButtons(r.level);
   if (r.phase === 'round') {
+    const sizes = TILE_ROWS[r.tiles.length] || [4, 4, 4];
     const rows = [];
-    for (let i = 0; i < r.tiles.length; i += 4) {
+    let i = 0;
+    for (const size of sizes) {
+      if (i >= r.tiles.length) break;
       rows.push(
-        r.tiles.slice(i, i + 4).map((c, k) => ({ text: c, callback_data: `L:${r.round}:${i + k}` }))
+        r.tiles.slice(i, i + size).map((c, k) => ({ text: c, callback_data: `L:${r.round}:${i + k}` }))
       );
+      i += size;
     }
     rows.push([{ text: '❌', callback_data: `X:${r.round}` }]);
     return rows;
@@ -316,6 +333,66 @@ if (!BOT_TOKEN) {
 
   // start (host only)
   bot.action(/^S:(easy|medium|hard)$/, (ctx) => {
+    const cq = ctx.callbackQuery;
+    if (!cq.inline_message_id) return answer(ctx);
+    const r = getOrCreateRoom(cq.inline_message_id, ctx.match[1], cq.from);
+    if (String(cq.from.id) !== r.hostId) return answer(ctx, 'فقط میزبان می‌تونه بازی رو شروع کنه.', true);
+    if (r.phase !== 'lobby') return answer(ctx);
+    const blue = members(r).filter((p) => p.team === 'blue').length;
+    const red = members(r).filter((p) => p.team === 'red').length;
+    if (blue < 1 || red < 1) {
+      return answer(ctx, 'تا یه نفر دیگه عضو نشه نمی‌تونی شروع کنی. توی هر تیم باید حداقل یه نفر باشه.', true);
+    }
+    startGame(r);
+    return answer(ctx, '▶️');
+  });
+
+  // tap a letter
+  bot.action(/^L:(\d+):(\d+)$/, (ctx) => {
+    const cq = ctx.callbackQuery;
+    const r = roomOf(cq);
+    if (!r) return answer(ctx, 'این بازی پیدا نشد.', true);
+    const rnd = Number(ctx.match[1]);
+    const idx = Number(ctx.match[2]);
+    if (r.phase !== 'round' || r.round !== rnd || Date.now() >= r.endsAt) return answer(ctx, '⏱');
+    const p = r.players.get(String(cq.from.id));
+    if (!p || !p.team) return answer(ctx, 'تو عضو این بازی نیستی.', true);
+    if (p.solved) return answer(ctx, '✅'); // already scored this word
+    if (idx < 0 || idx >= r.tiles.length) return answer(ctx);
+    if (p.sel.length >= r.tiles.length) return answer(ctx, '❌'); // wrong answer: clear it first
+    if (p.sel.includes(idx)) return answer(ctx, p.sel.map((i) => r.tiles[i]).join(''));
+    p.sel.push(idx);
+    if (p.sel.length < r.tiles.length) return answer(ctx, p.sel.map((i) => r.tiles[i]).join(''));
+    // all letters chosen: check automatically
+    if (norm(p.sel.map((i) => r.tiles[i]).join('')) === r.word) {
+      const remaining = Math.max(0, r.endsAt - Date.now());
+      p.score += Math.max(10, Math.round((100 * remaining) / ROUND_MS));
+      p.solved = true;
+      if (members(r).every((x) => x.solved)) endRound(r);
+      return answer(ctx, '✅');
+    }
+    return answer(ctx, '❌');
+  });
+
+  // clear my letters (does not touch the timer)
+  bot.action(/^X:(\d+)$/, (ctx) => {
+    const cq = ctx.callbackQuery;
+    const r = roomOf(cq);
+    if (!r) return answer(ctx);
+    const p = r.players.get(String(cq.from.id));
+    if (r.phase === 'round' && r.round === Number(ctx.match[1]) && p && p.team && !p.solved) p.sel = [];
+    return answer(ctx);
+  });
+
+  (async () => {
+    const me = await bot.telegram.getMe();
+    botUsername = me.username;
+    console.log('Bot started as @' + botUsername);
+    bot.launch().catch((e) => console.error('Bot error:', e));
+  })();
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+             }y|medium|hard)$/, (ctx) => {
     const cq = ctx.callbackQuery;
     if (!cq.inline_message_id) return answer(ctx);
     const r = getOrCreateRoom(cq.inline_message_id, ctx.match[1], cq.from);
