@@ -349,7 +349,7 @@ const lobbyButtons = (level) => [
 ];
 
 // how many letter buttons per row, for words of 4, 5 and 6 letters
-const TILE_ROWS = { 4: [2, 2], 5: [3, 2], 6: [3, 3] };
+const TILE_ROWS = { 4: [4], 5: [3, 2], 6: [3, 3] };
 
 function roomKeyboard(r) {
   if (r.phase === 'lobby') return lobbyButtons(r.level);
@@ -367,7 +367,14 @@ function roomKeyboard(r) {
     rows.push([{ text: '❌', callback_data: `X:${r.round}` }]);
     return rows;
   }
-  if (r.phase === 'done') return [[{ text: '🏆 جدول امتیازات گروه', callback_data: 'LB' }]];
+  if (r.phase === 'done') {
+    return [
+      [
+        { text: '🏆 جدول امتیازات گروه', callback_data: 'LB' },
+        { text: '🔄 بازی دوباره', switch_inline_query_current_chat: '' },
+      ],
+    ];
+  }
   if (r.phase === 'leaderboard') return [[{ text: '🔙 برگشت به نتیجه', callback_data: 'BACK' }]];
   return [];
 }
