@@ -178,7 +178,7 @@ const recentWords = { easy: [], medium: [], hard: [] }; // newest words used in 
 
 const rooms = new Map(); // roomId -> room (one per game message, so groups never mix)
 const inlineRooms = new Map(); // inline_message_id -> roomId
-const leaderboards = new Map(); // chatId -> { updatedAt, players: Map<uid, {name, score, games}> }
+const leaderboards = new Map(); // chatKey -> { updatedAt, players: Map<uid, {name, score, games}> }
 let bot = null;
 let botUsername = '';
 
@@ -221,9 +221,10 @@ function createRoom(init) {
     hostId: init.hostId,
     hostName: init.hostName,
     inlineMsgId: init.inlineMsgId,
-    chatId: init.chatId || null, // set on the first team click
+    chatKey: init.chatKey || null, // stable identifier for the chat (chat_instance)
     players: new Map(),
-    phase: 'lobby', // lobby | starting | round | reveal | done
+    phase: 'lobby', // lobby | starting | round | reveal | done | leaderboard
+    prevPhase: null, // remembered when we switch to leaderboard, so BACK restores it
     round: 0,
     word: '',
     tiles: [],
@@ -276,11 +277,11 @@ const totals = (r) => {
 
 // ---------- leaderboard ----------
 function updateLeaderboard(r) {
-  if (!r.chatId) return;
-  let lb = leaderboards.get(r.chatId);
+  if (!r.chatKey) return;
+  let lb = leaderboards.get(r.chatKey);
   if (!lb) {
     lb = { updatedAt: Date.now(), players: new Map() };
-    leaderboards.set(r.chatId, lb);
+    leaderboards.set(r.chatKey, lb);
   }
   lb.updatedAt = Date.now();
   for (const p of members(r)) {
@@ -295,14 +296,13 @@ function updateLeaderboard(r) {
   }
 }
 
-function leaderboardText(chatId) {
-  const lb = leaderboards.get(chatId);
+function leaderboardRows(chatKey) {
+  const lb = leaderboards.get(chatKey);
   if (!lb || lb.players.size === 0) return null;
-  const rows = [...lb.players.values()]
+  return [...lb.players.values()]
     .sort((a, b) => b.score - a.score)
     .map((e, i) => center(`${i + 1}. ${e.name} — ${e.score} (${e.games} بازی)`))
     .join('\n');
-  return `${center('🏆 جدول امتیازات گروه')}\n\n${rows}\n\n${center(SIGNATURE)}`;
 }
 
 // ---------- the game message (edited in place) ----------
@@ -319,6 +319,11 @@ function roomBody(r) {
   }
   if (r.phase === 'reveal') {
     return `${head}\n${center(`کلمه ${r.round} از ${ROUNDS}`)}\n\n${center('⏳ مرحله تموم شد')}`;
+  }
+  if (r.phase === 'leaderboard') {
+    const rows = leaderboardRows(r.chatKey);
+    if (!rows) return `${head}\n\n${center('🏆 جدول امتیازات گروه')}\n\n${center('هنوز امتیازی ثبت نشده.')}`;
+    return `${head}\n\n${center('🏆 جدول امتیازات گروه')}\n\n${rows}`;
   }
   // done
   const t = totals(r);
@@ -363,6 +368,7 @@ function roomKeyboard(r) {
     return rows;
   }
   if (r.phase === 'done') return [[{ text: '🏆 جدول امتیازات گروه', callback_data: 'LB' }]];
+  if (r.phase === 'leaderboard') return [[{ text: '🔙 برگشت به نتیجه', callback_data: 'BACK' }]];
   return [];
 }
 
@@ -454,8 +460,8 @@ setInterval(() => {
       inlineRooms.delete(r.inlineMsgId);
     }
   });
-  leaderboards.forEach((lb, chatId) => {
-    if (now - lb.updatedAt > LEADERBOARD_TTL) leaderboards.delete(chatId);
+  leaderboards.forEach((lb, key) => {
+    if (now - lb.updatedAt > LEADERBOARD_TTL) leaderboards.delete(key);
   });
 }, 30 * 60 * 1000);
 
@@ -516,8 +522,7 @@ if (!BOT_TOKEN) {
     const cq = ctx.callbackQuery;
     if (!cq.inline_message_id) return answer(ctx);
     const r = getOrCreateRoom(cq.inline_message_id, ctx.match[2], cq.from);
-    // the first click in a group tells us which chat this game belongs to
-    if (!r.chatId && cq.message && cq.message.chat) r.chatId = String(cq.message.chat.id);
+    if (!r.chatKey && cq.chat_instance) r.chatKey = cq.chat_instance;
     if (r.phase !== 'lobby') return answer(ctx, 'بازی شروع شده و تیم‌ها قفل شدن.', true);
     const p = getPlayer(r, cq.from);
     p.team = ctx.match[1];
@@ -530,7 +535,7 @@ if (!BOT_TOKEN) {
     const cq = ctx.callbackQuery;
     if (!cq.inline_message_id) return answer(ctx);
     const r = getOrCreateRoom(cq.inline_message_id, ctx.match[1], cq.from);
-    if (!r.chatId && cq.message && cq.message.chat) r.chatId = String(cq.message.chat.id);
+    if (!r.chatKey && cq.chat_instance) r.chatKey = cq.chat_instance;
     if (String(cq.from.id) !== r.hostId) return answer(ctx, 'فقط میزبان می‌تونه بازی رو شروع کنه.', true);
     if (r.phase !== 'lobby') return answer(ctx);
     const blue = members(r).filter((p) => p.team === 'blue').length;
@@ -578,25 +583,29 @@ if (!BOT_TOKEN) {
     return answer(ctx);
   });
 
-  // show the group's leaderboard (new message in the group)
+  // show the group's leaderboard inside the same inline message
   bot.action('LB', (ctx) => {
     const cq = ctx.callbackQuery;
-    const chatId = String(
-      (cq.message && cq.message.chat && cq.message.chat.id) || cq.chat_instance || ''
-    );
-    // find the chatId from any room that has it (fallback)
-    let effectiveChatId = chatId;
-    if (!leaderboards.has(effectiveChatId)) {
-      // try to find via inlineRooms -> rooms
-      const rid = inlineRooms.get(cq.inline_message_id);
-      const r = rid && rooms.get(rid);
-      if (r && r.chatId) effectiveChatId = r.chatId;
-    }
-    const text = leaderboardText(effectiveChatId);
-    if (!text) return answer(ctx, 'هنوز امتیازی ثبت نشده.', true);
-    return Promise.resolve(ctx.reply(text))
-      .then(() => answer(ctx, '🏆'))
-      .catch(() => answer(ctx, 'خطا در ارسال جدول.', true));
+    const r = roomOf(cq);
+    if (!r) return answer(ctx, 'بازی پیدا نشد.', true);
+    if (!r.chatKey) return answer(ctx, 'هنوز امتیازی ثبت نشده.', true);
+    const rows = leaderboardRows(r.chatKey);
+    if (!rows) return answer(ctx, 'هنوز امتیازی ثبت نشده.', true);
+    r.prevPhase = r.phase;
+    r.phase = 'leaderboard';
+    scheduleUpdate(r, 0);
+    return answer(ctx, '🏆');
+  });
+
+  // go back from the leaderboard to the result screen
+  bot.action('BACK', (ctx) => {
+    const cq = ctx.callbackQuery;
+    const r = roomOf(cq);
+    if (!r) return answer(ctx);
+    r.phase = r.prevPhase || 'done';
+    r.prevPhase = null;
+    scheduleUpdate(r, 0);
+    return answer(ctx, '🔙');
   });
 
   (async () => {
