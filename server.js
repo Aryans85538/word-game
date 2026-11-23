@@ -30,6 +30,7 @@ const LEVEL_DESC = {
   medium: 'کلمه‌های ۵ حرفی',
   hard: 'کلمه‌های ۶ حرفی',
 };
+const LEADERBOARD_TTL = 8 * 3600 * 1000; // 8 hours
 
 const WORDS = [
   // 4 letters (easy)
@@ -177,6 +178,7 @@ const recentWords = { easy: [], medium: [], hard: [] }; // newest words used in 
 
 const rooms = new Map(); // roomId -> room (one per game message, so groups never mix)
 const inlineRooms = new Map(); // inline_message_id -> roomId
+const leaderboards = new Map(); // chatId -> { updatedAt, players: Map<uid, {name, score, games}> }
 let bot = null;
 let botUsername = '';
 
@@ -219,6 +221,7 @@ function createRoom(init) {
     hostId: init.hostId,
     hostName: init.hostName,
     inlineMsgId: init.inlineMsgId,
+    chatId: init.chatId || null, // set on the first team click
     players: new Map(),
     phase: 'lobby', // lobby | starting | round | reveal | done
     round: 0,
@@ -270,6 +273,37 @@ const totals = (r) => {
   members(r).forEach((p) => (t[p.team] += p.score));
   return t;
 };
+
+// ---------- leaderboard ----------
+function updateLeaderboard(r) {
+  if (!r.chatId) return;
+  let lb = leaderboards.get(r.chatId);
+  if (!lb) {
+    lb = { updatedAt: Date.now(), players: new Map() };
+    leaderboards.set(r.chatId, lb);
+  }
+  lb.updatedAt = Date.now();
+  for (const p of members(r)) {
+    let e = lb.players.get(p.uid);
+    if (!e) {
+      e = { name: p.name, score: 0, games: 0 };
+      lb.players.set(p.uid, e);
+    }
+    e.name = p.name;
+    e.score += p.score;
+    e.games += 1;
+  }
+}
+
+function leaderboardText(chatId) {
+  const lb = leaderboards.get(chatId);
+  if (!lb || lb.players.size === 0) return null;
+  const rows = [...lb.players.values()]
+    .sort((a, b) => b.score - a.score)
+    .map((e, i) => center(`${i + 1}. ${e.name} — ${e.score} (${e.games} بازی)`))
+    .join('\n');
+  return `${center('🏆 جدول امتیازات گروه')}\n\n${rows}\n\n${center(SIGNATURE)}`;
+}
 
 // ---------- the game message (edited in place) ----------
 function roomBody(r) {
@@ -328,6 +362,7 @@ function roomKeyboard(r) {
     rows.push([{ text: '❌', callback_data: `X:${r.round}` }]);
     return rows;
   }
+  if (r.phase === 'done') return [[{ text: '🏆 جدول امتیازات گروه', callback_data: 'LB' }]];
   return [];
 }
 
@@ -404,10 +439,11 @@ function endRound(r) {
 
 function finish(r) {
   r.phase = 'done';
+  updateLeaderboard(r); // add this game's scores to the group's leaderboard
   scheduleUpdate(r, 0);
 }
 
-// forget games older than 6 hours
+// cleanup: forget old games (6h) and old leaderboards (8h)
 setInterval(() => {
   const now = Date.now();
   rooms.forEach((r, id) => {
@@ -417,6 +453,9 @@ setInterval(() => {
       rooms.delete(id);
       inlineRooms.delete(r.inlineMsgId);
     }
+  });
+  leaderboards.forEach((lb, chatId) => {
+    if (now - lb.updatedAt > LEADERBOARD_TTL) leaderboards.delete(chatId);
   });
 }, 30 * 60 * 1000);
 
@@ -477,6 +516,8 @@ if (!BOT_TOKEN) {
     const cq = ctx.callbackQuery;
     if (!cq.inline_message_id) return answer(ctx);
     const r = getOrCreateRoom(cq.inline_message_id, ctx.match[2], cq.from);
+    // the first click in a group tells us which chat this game belongs to
+    if (!r.chatId && cq.message && cq.message.chat) r.chatId = String(cq.message.chat.id);
     if (r.phase !== 'lobby') return answer(ctx, 'بازی شروع شده و تیم‌ها قفل شدن.', true);
     const p = getPlayer(r, cq.from);
     p.team = ctx.match[1];
@@ -489,6 +530,7 @@ if (!BOT_TOKEN) {
     const cq = ctx.callbackQuery;
     if (!cq.inline_message_id) return answer(ctx);
     const r = getOrCreateRoom(cq.inline_message_id, ctx.match[1], cq.from);
+    if (!r.chatId && cq.message && cq.message.chat) r.chatId = String(cq.message.chat.id);
     if (String(cq.from.id) !== r.hostId) return answer(ctx, 'فقط میزبان می‌تونه بازی رو شروع کنه.', true);
     if (r.phase !== 'lobby') return answer(ctx);
     const blue = members(r).filter((p) => p.team === 'blue').length;
@@ -534,6 +576,27 @@ if (!BOT_TOKEN) {
     const p = r.players.get(String(cq.from.id));
     if (r.phase === 'round' && r.round === Number(ctx.match[1]) && p && p.team && !p.solved) p.sel = [];
     return answer(ctx);
+  });
+
+  // show the group's leaderboard (new message in the group)
+  bot.action('LB', (ctx) => {
+    const cq = ctx.callbackQuery;
+    const chatId = String(
+      (cq.message && cq.message.chat && cq.message.chat.id) || cq.chat_instance || ''
+    );
+    // find the chatId from any room that has it (fallback)
+    let effectiveChatId = chatId;
+    if (!leaderboards.has(effectiveChatId)) {
+      // try to find via inlineRooms -> rooms
+      const rid = inlineRooms.get(cq.inline_message_id);
+      const r = rid && rooms.get(rid);
+      if (r && r.chatId) effectiveChatId = r.chatId;
+    }
+    const text = leaderboardText(effectiveChatId);
+    if (!text) return answer(ctx, 'هنوز امتیازی ثبت نشده.', true);
+    return Promise.resolve(ctx.reply(text))
+      .then(() => answer(ctx, '🏆'))
+      .catch(() => answer(ctx, 'خطا در ارسال جدول.', true));
   });
 
   (async () => {
