@@ -24,6 +24,7 @@ function pointsFor(r) {
 const REVEAL_MS = 3000;
 const START_MS = 3000;
 const LEVELS = { easy: 'آسان', medium: 'متوسط', hard: 'سخت' };
+const SIGNATURE = '✦ Nimkat ✦'; // shown on every game message, so everybody knows who made the game
 const LEVEL_DESC = {
   easy: 'کلمه‌های ۴ حرفی',
   medium: 'کلمه‌های ۵ حرفی',
@@ -271,7 +272,7 @@ const totals = (r) => {
 };
 
 // ---------- the game message (edited in place) ----------
-function roomText(r) {
+function roomBody(r) {
   const names = (t) =>
     [...r.players.values()].filter((p) => p.team === t).map((p) => p.name).join('، ') || '—';
   const head = center(`🎯 بازی حدس کلمه (${LEVELS[r.level]})`);
@@ -297,6 +298,8 @@ function roomText(r) {
     `\n\n${center(winner)}\n\n${board}`
   );
 }
+
+const roomText = (r) => `${roomBody(r)}\n\n${center(SIGNATURE)}`;
 
 const lobbyButtons = (level) => [
   [
@@ -443,7 +446,7 @@ if (!BOT_TOKEN) {
     Promise.resolve(ctx.answerCbQuery(text, alert ? { show_alert: true } : undefined)).catch(() => {});
 
   bot.start((ctx) =>
-    ctx.reply(`برای بازی، توی گروه بنویس @${botUsername} و سطح بازی رو انتخاب کن.`)
+    ctx.reply(`برای بازی، توی گروه بنویس @${botUsername} و سطح بازی رو انتخاب کن.\n\n${SIGNATURE}`)
   );
 
   // typing @botname in a group lists the three levels
@@ -453,8 +456,8 @@ if (!BOT_TOKEN) {
         type: 'article',
         id: 'lvl-' + lvl,
         title: LEVELS[lvl],
-        description: LEVEL_DESC[lvl],
-        input_message_content: { message_text: `🎯 بازی حدس کلمه (${LEVELS[lvl]})` },
+        description: `${LEVEL_DESC[lvl]}  •  Nimkat`,
+        input_message_content: { message_text: `🎯 بازی حدس کلمه (${LEVELS[lvl]})\n\n${center(SIGNATURE)}` },
         reply_markup: { inline_keyboard: lobbyButtons(lvl) },
       })),
       { cache_time: 0, is_personal: true }
