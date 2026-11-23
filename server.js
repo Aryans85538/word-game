@@ -8,6 +8,19 @@ const PORT = process.env.PORT || 3000;
 const ROUNDS = 5;
 const ROUND_TIMES = { easy: 12000, medium: 15000, hard: 18000 }; // time for one word, by level
 const roundMs = (r) => ROUND_TIMES[r.level];
+// points for a correct answer, by the real answer time in whole seconds:
+// full points up to the end of second `fullUntil`, then 10 points less for every further second
+const SCORING = {
+  easy: { full: 80, fullUntil: 5 },
+  medium: { full: 100, fullUntil: 6 },
+  hard: { full: 110, fullUntil: 8 },
+};
+function pointsFor(r) {
+  const { full, fullUntil } = SCORING[r.level];
+  const elapsed = roundMs(r) - (r.endsAt - Date.now()); // real time since the word appeared
+  const second = Math.max(1, Math.ceil(elapsed / 1000)); // 1 = the first second
+  return Math.max(0, full - 10 * Math.max(0, second - fullUntil));
+}
 const REVEAL_MS = 3000;
 const START_MS = 3000;
 const LEVELS = { easy: 'آسان', medium: 'متوسط', hard: 'سخت' };
@@ -502,8 +515,7 @@ if (!BOT_TOKEN) {
     if (p.sel.length < r.tiles.length) return answer(ctx, p.sel.map((i) => r.tiles[i]).join(''));
     // all letters chosen: check automatically
     if (norm(p.sel.map((i) => r.tiles[i]).join('')) === r.word) {
-      const remaining = Math.max(0, r.endsAt - Date.now());
-      p.score += Math.max(10, Math.round((100 * remaining) / roundMs(r)));
+      p.score += pointsFor(r);
       p.solved = true;
       if (members(r).every((x) => x.solved)) endRound(r);
       return answer(ctx, '✅');
