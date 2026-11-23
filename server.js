@@ -9,17 +9,17 @@ const ROUNDS = 5;
 const ROUND_TIMES = { easy: 12000, medium: 15000, hard: 18000 }; // time for one word, by level
 const roundMs = (r) => ROUND_TIMES[r.level];
 // points for a correct answer, by the real answer time in whole seconds:
-// full points up to the end of second `fullUntil`, then 10 points less for every further second
+// full points up to the end of second `fullUntil`, then `penalty` points less for every further second
 const SCORING = {
-  easy: { full: 80, fullUntil: 5 },
-  medium: { full: 100, fullUntil: 6 },
-  hard: { full: 110, fullUntil: 8 },
+  easy: { full: 20, fullUntil: 5, penalty: 2 },
+  medium: { full: 24, fullUntil: 6, penalty: 2 },
+  hard: { full: 28, fullUntil: 8, penalty: 3 },
 };
 function pointsFor(r) {
-  const { full, fullUntil } = SCORING[r.level];
+  const { full, fullUntil, penalty } = SCORING[r.level];
   const elapsed = roundMs(r) - (r.endsAt - Date.now()); // real time since the word appeared
   const second = Math.max(1, Math.ceil(elapsed / 1000)); // 1 = the first second
-  return Math.max(0, full - 10 * Math.max(0, second - fullUntil));
+  return Math.max(0, full - penalty * Math.max(0, second - fullUntil));
 }
 const REVEAL_MS = 3000;
 const START_MS = 3000;
