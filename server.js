@@ -301,7 +301,10 @@ function leaderboardRows(chatKey) {
   if (!lb || lb.players.size === 0) return null;
   return [...lb.players.values()]
     .sort((a, b) => b.score - a.score)
-    .map((e, i) => center(`${i + 1}. ${e.name} — ${e.score} (${e.games} بازی)`))
+    .map((e, i) => {
+      const medal = i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : '';
+      return center(`${medal}${i + 1}. ${e.name} — ${e.score} (${e.games} بازی)`);
+    })
     .join('\n');
 }
 
@@ -315,7 +318,8 @@ function roomBody(r) {
   if (r.phase === 'starting') return `${head}\n\n${teams}\n\n${center('🎮 بازی شروع شد! آماده باش…')}`;
   if (r.phase === 'round') {
     const s = Math.max(0, Math.ceil((r.endsAt - Date.now()) / 1000));
-    return `${head}\n${center(`کلمه ${r.round} از ${ROUNDS}  ⏱ ${s}`)}`;
+    const t = totals(r);
+    return `${head}\n${center(`کلمه ${r.round} از ${ROUNDS}  ⏱ ${s}`)}\n\n${center(`🔵 تیم آبی: ${t.blue}`)}\n${center(`🔴 تیم قرمز: ${t.red}`)}`;
   }
   if (r.phase === 'reveal') {
     return `${head}\n${center(`کلمه ${r.round} از ${ROUNDS}`)}\n\n${center('⏳ مرحله تموم شد')}`;
