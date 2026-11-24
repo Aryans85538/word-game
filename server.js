@@ -208,7 +208,9 @@ const norm = (s) =>
 const PAD = '\u2800';
 const TARGET_WIDTH = 34;
 const center = (s) => {
-  const side = Math.max(0, Math.floor((TARGET_WIDTH - [...s].length) / 2));
+  // strip HTML tags before counting so bold text stays centred
+  const visible = s.replace(/<[^>]+>/g, '');
+  const side = Math.max(0, Math.floor((TARGET_WIDTH - [...visible].length) / 2));
   return PAD.repeat(side) + s + PAD.repeat(side);
 };
 const fullName = (from) =>
@@ -310,10 +312,14 @@ function leaderboardRows(chatKey) {
 
 // ---------- the game message (edited in place) ----------
 function roomBody(r) {
-  const names = (t) =>
-    [...r.players.values()].filter((p) => p.team === t).map((p) => p.name).join('، ') || '—';
+  const list = (t) => {
+    const ps = [...r.players.values()].filter((p) => p.team === t);
+    if (!ps.length) return center('<b>   (خالی)</b>');
+    return ps.map((p) => center(`<b>   • ${p.name}</b>`)).join('\n');
+  };
   const head = center(`🎯 بازی حدس کلمه (${LEVELS[r.level]})`);
-  const teams = `${center(`🔵 تیم آبی: ${names('blue')}`)}\n${center(`🔴 تیم قرمز: ${names('red')}`)}`;
+  const sep = center('━━━━━━━━━━━━━━');
+  const teams = `${sep}\n${center('<b>🔵 تیم آبی</b>')}\n${list('blue')}\n${sep}\n${center('<b>🔴 تیم قرمز</b>')}\n${list('red')}\n${sep}`;
   if (r.phase === 'lobby') return `${head}\n${center(`👑 میزبان: ${r.hostName}`)}\n\n${teams}`;
   if (r.phase === 'starting') return `${head}\n\n${teams}\n\n${center('🎮 بازی شروع شد! آماده باش…')}`;
   if (r.phase === 'round') {
@@ -399,6 +405,7 @@ function scheduleUpdate(r, delay = 400) {
       if (key === r.lastKey) return;
       try {
         await bot.telegram.editMessageText(undefined, undefined, r.inlineMsgId, text, {
+          parse_mode: 'HTML',
           reply_markup: { inline_keyboard: kb },
         });
         r.lastKey = key;
