@@ -334,7 +334,10 @@ function roomBody(r) {
   const winner = t.blue === t.red ? '🤝 مساوی شد!' : t.blue > t.red ? '🏆 تیم آبی برنده شد!' : '🏆 تیم قرمز برنده شد!';
   const board = members(r)
     .sort((a, b) => b.score - a.score)
-    .map((p, i) => center(`${i + 1}. ${p.team === 'blue' ? '🔵' : '🔴'} ${p.name} — ${p.score}`))
+    .map((p, i) => {
+      const medal = i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : '';
+      return center(`${medal}${i + 1}. ${p.team === 'blue' ? '🔵' : '🔴'} ${p.name} — ${p.score}`);
+    })
     .join('\n');
   return (
     `${head}\n\n${center('🏁 بازی تموم شد')}\n${center(`🔵 آبی: ${t.blue}`)}\n${center(`🔴 قرمز: ${t.red}`)}` +
@@ -576,10 +579,11 @@ if (!BOT_TOKEN) {
     if (p.sel.length < r.tiles.length) return answer(ctx, p.sel.map((i) => r.tiles[i]).join(''));
     // all letters chosen: check automatically
     if (norm(p.sel.map((i) => r.tiles[i]).join('')) === r.word) {
-      p.score += pointsFor(r);
+      const pts = pointsFor(r);
+      p.score += pts;
       p.solved = true;
       if (members(r).every((x) => x.solved)) endRound(r);
-      return answer(ctx, '✅');
+      return answer(ctx, `✅ +${pts}`);
     }
     return answer(ctx, '❌');
   });
