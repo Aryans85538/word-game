@@ -6,14 +6,14 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
 
 const ROUNDS = 5;
-const ROUND_TIMES = { easy: 12000, medium: 15000, hard: 18000 }; // time for one word, by level
+const ROUND_TIMES = { easy: 14000, medium: 17000, hard: 21000 }; // time for one word, by level
 const roundMs = (r) => ROUND_TIMES[r.level];
 // points for a correct answer, by the real answer time in whole seconds:
 // full points up to the end of second `fullUntil`, then `penalty` points less for every further second
 const SCORING = {
   easy: { full: 20, fullUntil: 5, penalty: 2 },
   medium: { full: 24, fullUntil: 6, penalty: 2 },
-  hard: { full: 28, fullUntil: 8, penalty: 3 },
+  hard: { full: 28, fullUntil: 8, penalty: 2 },
 };
 function pointsFor(r) {
   const { full, fullUntil, penalty } = SCORING[r.level];
