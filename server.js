@@ -580,7 +580,11 @@ if (!BOT_TOKEN) {
     if (!p || !p.team) return answer(ctx, 'تو عضو این بازی نیستی.', true);
     if (p.solved) return answer(ctx, '✅'); // already scored this word
     if (idx < 0 || idx >= r.tiles.length) return answer(ctx);
-    if (p.sel.length >= r.tiles.length) return answer(ctx, '❌'); // wrong answer: clear it first
+    // if the previous attempt was full and wrong, a new tap starts over
+    if (p.sel.length >= r.tiles.length) {
+      p.sel = [idx];
+      return answer(ctx, r.tiles[idx]);
+    }
     if (p.sel.includes(idx)) return answer(ctx, p.sel.map((i) => r.tiles[i]).join(''));
     p.sel.push(idx);
     if (p.sel.length < r.tiles.length) return answer(ctx, p.sel.map((i) => r.tiles[i]).join(''));
