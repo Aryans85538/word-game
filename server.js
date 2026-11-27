@@ -5,6 +5,10 @@ const { Telegraf } = require('telegraf');
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
 
+// ⚠️ آیدی و لینک کانال
+const REQUIRED_CHANNEL = '@Nimkat000';
+const CHANNEL_LINK = 'https://t.me/Nimkat000';
+
 const ROUNDS = 5;
 const ROUND_TIMES = { easy: 16000, medium: 19000, hard: 23000 }; // +2s per level
 const roundMs = (r) => ROUND_TIMES[r.level];
@@ -215,6 +219,34 @@ const center = (s) => {
 };
 const fullName = (from) =>
   ([from.first_name, from.last_name].filter(Boolean).join(' ') || 'ناشناس').slice(0, 30);
+
+// ---------- membership check ----------
+async function isMember(ctx, userId) {
+  try {
+    const res = await ctx.telegram.getChatMember(REQUIRED_CHANNEL, userId);
+    return ['member', 'administrator', 'creator'].includes(res.status);
+  } catch (e) {
+    console.log('membership check failed:', e.message);
+    return false;
+  }
+}
+
+async function requireMembership(ctx, from) {
+  const ok = await isMember(ctx, from.id);
+  if (ok) return true;
+  await ctx.answerCbQuery('اول عضو کانال شو!', { show_alert: true }).catch(() => {});
+  await ctx
+    .reply(
+      `⚠️ برای بازی کردن، اول باید عضو کانال ما بشی:\n\n${CHANNEL_LINK}\n\nبعد از عضویت، دوباره امتحان کن.`,
+      {
+        reply_markup: {
+          inline_keyboard: [[{ text: '📢 عضویت در کانال', url: CHANNEL_LINK }]],
+        },
+      }
+    )
+    .catch(() => {});
+  return false;
+}
 
 function createRoom(init) {
   const r = {
@@ -538,10 +570,11 @@ if (!BOT_TOKEN) {
     getOrCreateRoom(res.inline_message_id, level, res.from);
   });
 
-  // join / change team (only before the game starts)
-  bot.action(/^T:(blue|red):(easy|medium|hard)$/, (ctx) => {
+  // join / change team (only before the game starts) — requires channel membership
+  bot.action(/^T:(blue|red):(easy|medium|hard)$/, async (ctx) => {
     const cq = ctx.callbackQuery;
     if (!cq.inline_message_id) return answer(ctx);
+    if (!(await requireMembership(ctx, cq.from))) return;
     const r = getOrCreateRoom(cq.inline_message_id, ctx.match[2], cq.from);
     if (!r.chatKey && cq.chat_instance) r.chatKey = cq.chat_instance;
     if (r.phase !== 'lobby') return answer(ctx, 'بازی شروع شده و تیم‌ها قفل شدن.', true);
@@ -551,10 +584,11 @@ if (!BOT_TOKEN) {
     return answer(ctx, p.team === 'blue' ? '🔵' : '🔴');
   });
 
-  // start (host only)
-  bot.action(/^S:(easy|medium|hard)$/, (ctx) => {
+  // start (host only) — requires channel membership
+  bot.action(/^S:(easy|medium|hard)$/, async (ctx) => {
     const cq = ctx.callbackQuery;
     if (!cq.inline_message_id) return answer(ctx);
+    if (!(await requireMembership(ctx, cq.from))) return;
     const r = getOrCreateRoom(cq.inline_message_id, ctx.match[1], cq.from);
     if (!r.chatKey && cq.chat_instance) r.chatKey = cq.chat_instance;
     if (String(cq.from.id) !== r.hostId) return answer(ctx, 'فقط میزبان می‌تونه بازی رو شروع کنه.', true);
