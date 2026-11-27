@@ -6,14 +6,14 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
 
 const ROUNDS = 5;
-const ROUND_TIMES = { easy: 14000, medium: 17000, hard: 21000 }; // time for one word, by level
+const ROUND_TIMES = { easy: 16000, medium: 19000, hard: 23000 }; // +2s per level
 const roundMs = (r) => ROUND_TIMES[r.level];
 // points for a correct answer, by the real answer time in whole seconds:
 // full points up to the end of second `fullUntil`, then `penalty` points less for every further second
 const SCORING = {
-  easy: { full: 20, fullUntil: 5, penalty: 2 },
-  medium: { full: 24, fullUntil: 6, penalty: 2 },
-  hard: { full: 28, fullUntil: 8, penalty: 2 },
+  easy: { full: 24, fullUntil: 5, penalty: 2 },
+  medium: { full: 28, fullUntil: 6, penalty: 2 },
+  hard: { full: 32, fullUntil: 8, penalty: 2 },
 };
 function pointsFor(r) {
   const { full, fullUntil, penalty } = SCORING[r.level];
@@ -263,7 +263,7 @@ function getPlayer(r, from) {
   const uid = String(from.id);
   let p = r.players.get(uid);
   if (!p) {
-    p = { uid, name: '', team: null, score: 0, solved: false, sel: [] };
+    p = { uid, name: '', team: null, score: 0, solved: false, sel: [], lastTap: 0 };
     r.players.set(uid, p);
   }
   p.name = fullName(from);
@@ -393,7 +393,7 @@ function roomKeyboard(r) {
 }
 
 // edits are queued so they always go out in order; text and keyboard are read when the edit runs
-function scheduleUpdate(r, delay = 400) {
+function scheduleUpdate(r, delay = 150) {
   if (!bot || !r.inlineMsgId) return;
   if (r.updTimer) clearTimeout(r.updTimer);
   r.updTimer = setTimeout(() => {
@@ -440,18 +440,18 @@ function nextRound(r) {
   const w = pool[Math.floor(Math.random() * pool.length)];
   r.used.add(w);
   recent.push(w);
-  while (recent.length > Math.floor(all.length / 2)) recent.shift();
+  while (recent.length > Math.floor(all.length * 0.75)) recent.shift(); // keep 75% of words out of rotation
   r.word = norm(w);
   r.tiles = scramble(w);
   r.players.forEach((p) => {
     p.solved = false;
     p.sel = [];
+    p.lastTap = 0;
   });
   r.phase = 'round';
   const ms = roundMs(r);
   r.endsAt = Date.now() + ms; // one deadline for everyone, kept by the server
   scheduleUpdate(r, 0);
-  r.midTimer = setTimeout(() => scheduleUpdate(r, 0), Math.floor(ms / 2)); // countdown refreshed once, halfway
   r.timer = setTimeout(() => endRound(r), ms);
 }
 
@@ -580,6 +580,9 @@ if (!BOT_TOKEN) {
     if (!p || !p.team) return answer(ctx, 'تو عضو این بازی نیستی.', true);
     if (p.solved) return answer(ctx, '✅'); // already scored this word
     if (idx < 0 || idx >= r.tiles.length) return answer(ctx);
+    // ignore taps that arrive too fast (prevents out-of-order letters)
+    if (p.lastTap && Date.now() - p.lastTap < 150) return answer(ctx);
+    p.lastTap = Date.now();
     // if the previous attempt was full and wrong, a new tap starts over
     if (p.sel.length >= r.tiles.length) {
       p.sel = [idx];
