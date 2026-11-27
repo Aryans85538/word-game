@@ -237,7 +237,7 @@ async function requireMembership(ctx, from) {
   await ctx.answerCbQuery('اول عضو کانال شو!', { show_alert: true }).catch(() => {});
   await ctx
     .reply(
-      `⚠️ برای بازی کردن، اول باید عضو کانال ما بشی:\n\n${CHANNEL_LINK}\n\nبعد از عضویت، دوباره امتحان کن.`,
+      `⚠️ برای بازی کردن، اول باید عضو کانال ما بشی:\n\n${CHANNEL_LINK}\n\nبعد از عضویت، دوباره روی دکمه‌ی تیم بزن.`,
       {
         reply_markup: {
           inline_keyboard: [[{ text: '📢 عضویت در کانال', url: CHANNEL_LINK }]],
